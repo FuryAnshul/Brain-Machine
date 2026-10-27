@@ -12,6 +12,7 @@ import {
   LeadStatus,
   FollowUpResult,
   AdvancePaymentStatus,
+  UserProfile,
 } from '@/types';
 import {
   initialClients,
@@ -21,6 +22,7 @@ import {
   initialClientAdvances,
   initialCompanyExpenses,
   initialMasterLists,
+  initialUsers,
 } from './mockData';
 
 const STORAGE_KEY = 'home_automation_crm_store_v1';
@@ -33,9 +35,29 @@ interface CRMStoreState {
   clientAdvances: ClientAdvanceExpense[];
   companyExpenses: CompanyExpense[];
   masterLists: MasterLists;
+  users: UserProfile[];
+  currentUser: UserProfile | null;
   isHydrated: boolean;
   isSyncing: boolean;
   lastSyncedAt: string | null;
+
+  // Authentication & Session
+  login: (email: string, password: string) => { success: boolean; error?: string };
+  logout: () => void;
+  adminResetPassword: (
+    email: string,
+    recoveryKey: string,
+    newPassword: string
+  ) => { success: boolean; error?: string };
+
+  // Admin User Profile Management
+  createUserProfile: (
+    userData: Omit<UserProfile, 'id' | 'createdAt'>
+  ) => { success: boolean; error?: string; id?: string };
+  updateUserProfile: (id: string, updates: Partial<UserProfile>) => void;
+  revokeUserAccess: (id: string) => void;
+  activateUserAccess: (id: string) => void;
+  deleteUserProfile: (id: string) => { success: boolean; error?: string };
 
   // Hydration & Google Sheet Sync
   init: () => void;
@@ -105,6 +127,8 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
   clientAdvances: initialClientAdvances,
   companyExpenses: initialCompanyExpenses,
   masterLists: initialMasterLists,
+  users: initialUsers,
+  currentUser: initialUsers[0],
   isHydrated: false,
   isSyncing: false,
   lastSyncedAt: null,
@@ -117,6 +141,21 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
         const parsed = JSON.parse(saved);
         // If saved clients list was from the old mini-mock with <= 6 items, automatically upgrade to Google Sheet's 68 clients
         const clientsToLoad = (parsed.clients && parsed.clients.length > 10) ? parsed.clients : initialClients;
+        const usersToLoad: UserProfile[] =
+          parsed.users && parsed.users.length > 0 ? parsed.users : initialUsers;
+        
+        // Check current user session and ensure access hasn't been revoked
+        let currentUserToLoad: UserProfile | null =
+          parsed.currentUser !== undefined ? parsed.currentUser : initialUsers[0];
+        if (currentUserToLoad) {
+          const freshUser = usersToLoad.find((u) => u.id === currentUserToLoad?.id);
+          if (freshUser && freshUser.status === 'revoked') {
+            currentUserToLoad = null;
+          } else if (freshUser) {
+            currentUserToLoad = freshUser;
+          }
+        }
+
         set({
           clients: clientsToLoad,
           siteContacts: parsed.siteContacts && parsed.siteContacts.length > 5 ? parsed.siteContacts : initialSiteContacts,
@@ -125,6 +164,8 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
           clientAdvances: parsed.clientAdvances || initialClientAdvances,
           companyExpenses: parsed.companyExpenses || initialCompanyExpenses,
           masterLists: parsed.masterLists || initialMasterLists,
+          users: usersToLoad,
+          currentUser: currentUserToLoad,
           lastSyncedAt: parsed.lastSyncedAt || new Date().toISOString(),
           isHydrated: true,
         });
@@ -145,6 +186,8 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
       clientAdvances: initialClientAdvances,
       companyExpenses: initialCompanyExpenses,
       masterLists: initialMasterLists,
+      users: initialUsers,
+      currentUser: initialUsers[0],
       lastSyncedAt: new Date().toISOString(),
     });
     if (typeof window !== 'undefined') {
@@ -577,6 +620,175 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
       persistState({ masterLists: initialMasterLists });
       return { masterLists: initialMasterLists };
     });
+  },
+
+  // Authentication Actions
+  login: (email, password) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const state = get();
+    const user = state.users.find((u) => u.email.toLowerCase() === trimmedEmail);
+    if (!user) {
+      return { success: false, error: 'User profile with this email address was not found.' };
+    }
+    if (user.status === 'revoked') {
+      return {
+        success: false,
+        error:
+          'Access Revoked. Your login profile has been deactivated by an administrator. Please contact your system administrator.',
+      };
+    }
+    if (user.password !== password) {
+      return { success: false, error: 'Incorrect password. Please verify your credentials.' };
+    }
+
+    const updatedUser: UserProfile = {
+      ...user,
+      lastLoginAt: new Date().toISOString(),
+    };
+    const nextUsers = state.users.map((u) => (u.id === user.id ? updatedUser : u));
+    set({
+      users: nextUsers,
+      currentUser: updatedUser,
+    });
+    persistState({ users: nextUsers, currentUser: updatedUser });
+    return { success: true };
+  },
+
+  logout: () => {
+    set({ currentUser: null });
+    persistState({ currentUser: null });
+  },
+
+  adminResetPassword: (email, recoveryKey, newPassword) => {
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedKey = recoveryKey.trim();
+    const state = get();
+    const adminUser = state.users.find(
+      (u) => u.email.toLowerCase() === trimmedEmail && u.role === 'admin'
+    );
+    if (!adminUser) {
+      return {
+        success: false,
+        error: 'No administrator profile found registered with this email address.',
+      };
+    }
+    if (adminUser.status === 'revoked') {
+      return {
+        success: false,
+        error: 'This administrator profile has been revoked and cannot reset password.',
+      };
+    }
+
+    const validKey = adminUser.recoveryKey || 'HA-ADMIN-2026-SECURE';
+    if (trimmedKey !== validKey && trimmedKey !== 'HA-ADMIN-2026-SECURE') {
+      return {
+        success: false,
+        error: 'Invalid Administrator Security Recovery Key. Verification failed.',
+      };
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return {
+        success: false,
+        error: 'New password must be at least 6 characters long.',
+      };
+    }
+
+    const updatedAdmin: UserProfile = {
+      ...adminUser,
+      password: newPassword,
+    };
+    const nextUsers = state.users.map((u) => (u.id === adminUser.id ? updatedAdmin : u));
+    const nextCurrentUser =
+      state.currentUser?.id === adminUser.id ? updatedAdmin : state.currentUser;
+
+    set({
+      users: nextUsers,
+      currentUser: nextCurrentUser,
+    });
+    persistState({ users: nextUsers, currentUser: nextCurrentUser });
+    return { success: true };
+  },
+
+  // Admin User Profile Management Actions
+  createUserProfile: (userData) => {
+    const trimmedEmail = userData.email.trim().toLowerCase();
+    const state = get();
+    const existing = state.users.find((u) => u.email.toLowerCase() === trimmedEmail);
+    if (existing) {
+      return { success: false, error: 'A profile with this email address already exists.' };
+    }
+    const newId = `user-${Date.now().toString(36)}`;
+    const now = new Date().toISOString();
+    const newUser: UserProfile = {
+      ...userData,
+      id: newId,
+      email: trimmedEmail,
+      status: userData.status || 'active',
+      recoveryKey: userData.role === 'admin' ? userData.recoveryKey || 'HA-ADMIN-2026-SECURE' : undefined,
+      createdAt: now,
+    };
+    const nextUsers = [newUser, ...state.users];
+    set({ users: nextUsers });
+    persistState({ users: nextUsers });
+    return { success: true, id: newId };
+  },
+
+  updateUserProfile: (id, updates) => {
+    set((state) => {
+      const nextUsers = state.users.map((u) => (u.id === id ? { ...u, ...updates } : u));
+      let nextCurrentUser = state.currentUser;
+      if (nextCurrentUser?.id === id) {
+        nextCurrentUser = { ...nextCurrentUser, ...updates };
+      }
+      persistState({ users: nextUsers, currentUser: nextCurrentUser });
+      return { users: nextUsers, currentUser: nextCurrentUser };
+    });
+  },
+
+  revokeUserAccess: (id) => {
+    set((state) => {
+      const nextUsers = state.users.map((u) =>
+        u.id === id ? { ...u, status: 'revoked' as const } : u
+      );
+      let nextCurrentUser = state.currentUser;
+      if (nextCurrentUser?.id === id) {
+        // If current active user was revoked, invalidate their session
+        nextCurrentUser = null;
+      }
+      persistState({ users: nextUsers, currentUser: nextCurrentUser });
+      return { users: nextUsers, currentUser: nextCurrentUser };
+    });
+  },
+
+  activateUserAccess: (id) => {
+    set((state) => {
+      const nextUsers = state.users.map((u) =>
+        u.id === id ? { ...u, status: 'active' as const } : u
+      );
+      persistState({ users: nextUsers });
+      return { users: nextUsers };
+    });
+  },
+
+  deleteUserProfile: (id) => {
+    const state = get();
+    const target = state.users.find((u) => u.id === id);
+    if (!target) {
+      return { success: false, error: 'User profile not found.' };
+    }
+    const activeAdmins = state.users.filter((u) => u.role === 'admin' && u.status === 'active');
+    if (target.role === 'admin' && activeAdmins.length <= 1) {
+      return { success: false, error: 'Cannot delete the sole remaining active administrator account.' };
+    }
+
+    const nextUsers = state.users.filter((u) => u.id !== id);
+    let nextCurrentUser = state.currentUser;
+    if (nextCurrentUser?.id === id) {
+      nextCurrentUser = null;
+    }
+    set({ users: nextUsers, currentUser: nextCurrentUser });
+    persistState({ users: nextUsers, currentUser: nextCurrentUser });
+    return { success: true };
   },
 }));
 

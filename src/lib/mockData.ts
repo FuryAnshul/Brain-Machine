@@ -6,6 +6,7 @@ import {
   ClientAdvanceExpense,
   CompanyExpense,
   MasterLists,
+  UserProfile,
 } from '@/types';
 import googleSheetPayload from './googleSheetData.json';
 
@@ -93,3 +94,52 @@ export const initialCompanyExpenses: CompanyExpense[] = [
     balanceOutstanding: 2499,
   },
 ];
+
+export const initialUsers: UserProfile[] = [
+  {
+    id: 'user-admin-1',
+    name: 'Admin Anshul',
+    email: 'admin@homeautomation.com',
+    password: 'admin123',
+    role: 'admin',
+    status: 'active',
+    mobileNo: '9876543210',
+    recoveryKey: 'HA-ADMIN-2026-SECURE',
+    createdAt: '2026-09-01',
+    lastLoginAt: '2026-10-27T10:30:00Z',
+  },
+  {
+    id: 'user-staff-1',
+    name: 'Ankit Sir',
+    email: 'ankit@homeautomation.com',
+    password: 'ankit123',
+    role: 'staff',
+    status: 'active',
+    mobileNo: '9826536260',
+    createdAt: '2026-09-05',
+    lastLoginAt: '2026-10-26T14:15:00Z',
+  },
+  {
+    id: 'user-eng-1',
+    name: 'Pushpak Sharma',
+    email: 'pushpak@homeautomation.com',
+    password: 'pushpak123',
+    role: 'engineer',
+    status: 'active',
+    mobileNo: '9871031171',
+    createdAt: '2026-09-10',
+    lastLoginAt: '2026-10-25T09:40:00Z',
+  },
+  {
+    id: 'user-revoked-1',
+    name: 'Former Contractor',
+    email: 'contractor@revoked.com',
+    password: 'password123',
+    role: 'staff',
+    status: 'revoked',
+    mobileNo: '9811223344',
+    createdAt: '2026-08-15',
+    lastLoginAt: '2026-09-01T12:00:00Z',
+  },
+];
+

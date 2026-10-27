@@ -142,3 +142,25 @@ export interface MasterLists {
   teamMembers: string[];
   referralPartners: string[];
 }
+
+export type UserRole = 'admin' | 'staff' | 'engineer';
+export type UserStatus = 'active' | 'revoked';
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  status: UserStatus;
+  mobileNo?: string;
+  recoveryKey?: string;
+  createdAt: string;
+  lastLoginAt?: string;
+}
+
+export interface AuthSession {
+  currentUser: UserProfile | null;
+  isAuthenticated: boolean;
+}
+

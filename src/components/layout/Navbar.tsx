@@ -14,6 +14,11 @@ import {
   AlertCircle,
   RotateCcw,
   FileSpreadsheet,
+  Shield,
+  LogIn,
+  LogOut,
+  ChevronDown,
+  UserCheck,
 } from 'lucide-react';
 import { useCRMStore } from '@/lib/store';
 import { computeFollowUpDueStatus } from '@/lib/formatters';
@@ -23,10 +28,12 @@ import { GoogleSheetSyncModal } from '../shared/GoogleSheetSyncModal';
 
 export function Navbar() {
   const pathname = usePathname();
-  const { clients, init, isHydrated, resetToFactoryDemo } = useCRMStore();
+  const { clients, init, isHydrated, resetToFactoryDemo, currentUser, logout, users, login } =
+    useCRMStore();
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
 
   useEffect(() => {
     init();
@@ -62,7 +69,14 @@ export function Navbar() {
     { href: '/clients', label: 'Client Overview', icon: Users },
     { href: '/expenses', label: 'Other Expenses & Overhead', icon: Receipt },
     { href: '/settings/lists', label: 'Master Lists & Config', icon: Settings },
+    ...(currentUser?.role === 'admin'
+      ? [{ href: '/admin', label: 'Admin Console', icon: Shield }]
+      : []),
   ];
+
+  if (pathname === '/login') {
+    return null;
+  }
 
   return (
     <>
@@ -176,6 +190,114 @@ export function Navbar() {
               >
                 {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
               </button>
+
+              {/* User Account / Profile Dropdown */}
+              {isHydrated && currentUser ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+                    className="flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all text-xs"
+                  >
+                    <div
+                      className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold text-[11px] text-white shrink-0 ${
+                        currentUser.role === 'admin'
+                          ? 'bg-blue-600'
+                          : currentUser.role === 'engineer'
+                          ? 'bg-cyan-600'
+                          : 'bg-indigo-600'
+                      }`}
+                    >
+                      {currentUser.name.charAt(0)}
+                    </div>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200 max-w-[90px] truncate hidden sm:inline">
+                      {currentUser.name}
+                    </span>
+                    <span
+                      className={`text-[9px] uppercase font-bold px-1 py-0.2 rounded hidden md:inline ${
+                        currentUser.role === 'admin'
+                          ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {currentUser.role}
+                    </span>
+                    <ChevronDown className="w-3 h-3 text-slate-400" />
+                  </button>
+
+                  {/* Popover Menu */}
+                  {isUserMenuOpen && (
+                    <div
+                      className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xl py-2 z-50 text-xs space-y-1"
+                      onMouseLeave={() => setIsUserMenuOpen(false)}
+                    >
+                      <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-800">
+                        <p className="font-bold text-slate-900 dark:text-white truncate">
+                          {currentUser.name}
+                        </p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                          {currentUser.email}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded capitalize ${
+                              currentUser.role === 'admin'
+                                ? 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            {currentUser.role}
+                          </span>
+                          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Active Session
+                          </span>
+                        </div>
+                      </div>
+
+                      {currentUser.role === 'admin' && (
+                        <Link
+                          href="/admin"
+                          onClick={() => setIsUserMenuOpen(false)}
+                          className="flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-blue-50 dark:hover:bg-blue-950/60 hover:text-blue-600 transition-colors"
+                        >
+                          <Shield className="w-3.5 h-3.5 text-blue-500" />
+                          <span className="font-semibold">Admin Console</span>
+                        </Link>
+                      )}
+
+                      <Link
+                        href="/login"
+                        onClick={() => setIsUserMenuOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Switch Profile / Login</span>
+                      </Link>
+
+                      <div className="border-t border-slate-100 dark:border-slate-800 pt-1">
+                        <button
+                          onClick={() => {
+                            logout();
+                            setIsUserMenuOpen(false);
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors font-semibold"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-100 shadow-sm transition-all"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Sign In</span>
+                </Link>
+              )}
             </div>
           </div>
         </div>
