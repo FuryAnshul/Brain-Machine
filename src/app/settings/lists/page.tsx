@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Link from 'next/link';
 import {
   Settings,
   Plus,
@@ -12,13 +13,16 @@ import {
   Tags,
   Receipt,
   Share2,
+  ShieldAlert,
 } from 'lucide-react';
 import { useCRMStore } from '@/lib/store';
 import { MasterLists } from '@/types';
 import { cn } from '@/lib/utils';
 
 export default function MasterListsPage() {
-  const { masterLists, addItemToList, removeItemFromList, resetMasterLists } = useCRMStore();
+  const { masterLists, addItemToList, removeItemFromList, resetMasterLists, currentUser, isHydrated } =
+    useCRMStore();
+  const isAdmin = currentUser?.role === 'admin';
   const [activeCategory, setActiveCategory] = useState<keyof MasterLists>('statuses');
   const [newItemText, setNewItemText] = useState('');
 
@@ -76,6 +80,36 @@ export default function MasterListsPage() {
     addItemToList(activeCategory, newItemText.trim());
     setNewItemText('');
   };
+
+  if (isHydrated && !isAdmin) {
+    return (
+      <div className="min-h-[80vh] flex flex-col items-center justify-center p-6 text-center max-w-lg mx-auto">
+        <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center mb-4 shadow-lg shadow-amber-500/10">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-black text-slate-900 dark:text-white">
+          Administrator Access Required
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 mb-6 leading-relaxed">
+          Master Lists & System Configuration is restricted to system administrators. Please sign in with an Administrator profile to configure lists and system settings.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <Link
+            href="/clients"
+            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors"
+          >
+            Return to Overview
+          </Link>
+          <Link
+            href="/login"
+            className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
+          >
+            Sign In as Admin
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">

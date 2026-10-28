@@ -10,34 +10,28 @@ import {
   Eye,
   EyeOff,
   ShieldAlert,
-  ShieldCheck,
-  UserCheck,
-  UserX,
   ArrowRight,
   Sun,
   Moon,
-  Sparkles,
-  KeyRound,
 } from 'lucide-react';
 import { useCRMStore } from '@/lib/store';
-import { AdminForgotPasswordModal } from '@/components/auth/AdminForgotPasswordModal';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, currentUser, logout, isHydrated } = useCRMStore();
+  const { init, login, currentUser, logout, isHydrated } = useCRMStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   React.useEffect(() => {
+    init();
     const isDark = document.documentElement.classList.contains('dark');
     setIsDarkMode(isDark);
-  }, []);
+  }, [init]);
 
   const toggleTheme = () => {
     if (isDarkMode) {
@@ -56,21 +50,13 @@ export default function LoginPage() {
     setError(null);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const res = login(email, password);
+    const res = login(email, password);
+    if (!res.success) {
       setIsLoading(false);
-      if (!res.success) {
-        setError(res.error || 'Authentication failed. Please verify your credentials.');
-      } else {
-        router.push('/clients');
-      }
-    }, 400);
-  };
-
-  const fillQuickLogin = (quickEmail: string, quickPass: string) => {
-    setEmail(quickEmail);
-    setPassword(quickPass);
-    setError(null);
+      setError(res.error || 'Authentication failed. Please verify your credentials.');
+    } else {
+      window.location.href = '/clients';
+    }
   };
 
   return (
@@ -179,18 +165,10 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="mb-1.5">
                 <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setIsForgotPasswordOpen(true)}
-                  className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
-                >
-                  <KeyRound className="w-3 h-3" />
-                  <span>Forgot Password?</span>
-                </button>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
@@ -199,7 +177,7 @@ export default function LoginPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
+                  placeholder="•••••••• (admin123)"
                   className="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all"
                 />
                 <button
@@ -220,98 +198,27 @@ export default function LoginPage() {
               <span>{isLoading ? 'Verifying...' : 'Sign In to Workspace'}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
+
+            <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-800/80">
+              <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                Default credentials: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">admin@homeautomation.com</span> / <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">admin123</span>
+              </span>
+            </div>
           </form>
-
-          {/* Quick Demo Login Switcher */}
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Quick Login Profiles</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => fillQuickLogin('admin@homeautomation.com', 'admin123')}
-                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-700 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                    Admin
-                  </span>
-                  <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                  admin@homeautomation.com
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillQuickLogin('ankit@homeautomation.com', 'ankit123')}
-                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-700 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                    Staff (Ankit)
-                  </span>
-                  <UserCheck className="w-3 h-3 text-blue-500" />
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                  ankit@homeautomation.com
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillQuickLogin('pushpak@homeautomation.com', 'pushpak123')}
-                className="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-blue-50 dark:hover:bg-blue-950/40 hover:border-blue-300 dark:hover:border-blue-700 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-blue-400">
-                    Engineer
-                  </span>
-                  <UserCheck className="w-3 h-3 text-cyan-500" />
-                </div>
-                <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
-                  pushpak@homeautomation.com
-                </div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => fillQuickLogin('contractor@revoked.com', 'password123')}
-                className="p-2 rounded-lg border border-red-200 dark:border-red-900/60 bg-red-50/40 dark:bg-red-950/20 hover:bg-red-100/60 dark:hover:bg-red-900/40 text-left transition-all group"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-red-700 dark:text-red-400">
-                    Revoked Profile
-                  </span>
-                  <UserX className="w-3 h-3 text-red-500" />
-                </div>
-                <div className="text-[10px] text-red-500/80 dark:text-red-400/70 mt-0.5 truncate">
-                  contractor@revoked.com
-                </div>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Back Link */}
-        <div className="text-center">
-          <Link
-            href="/clients"
-            className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-          >
-            ← Skip & Continue to Client Overview
-          </Link>
-        </div>
+        {isHydrated && currentUser && (
+          <div className="text-center">
+            <Link
+              href="/clients"
+              className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+            >
+              ← Return to Client Overview
+            </Link>
+          </div>
+        )}
       </div>
-
-      {/* Admin Forgot Password Modal */}
-      <AdminForgotPasswordModal
-        isOpen={isForgotPasswordOpen}
-        onClose={() => setIsForgotPasswordOpen(false)}
-      />
     </div>
   );
 }

@@ -103,6 +103,21 @@ export function cleanMobile(mobile: string | undefined | null): string {
 }
 
 /**
+ * Normalizes phone numbers: strips non-digits, strips country code (+91/91)
+ * or leading 0 if standard Indian 10-digit number.
+ */
+export function normalizePhoneNumber(mobile: string | undefined | null): string {
+  if (!mobile) return '';
+  let digits = mobile.replace(/[^0-9]/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) {
+    digits = digits.substring(2);
+  } else if (digits.length === 11 && digits.startsWith('0')) {
+    digits = digits.substring(1);
+  }
+  return digits;
+}
+
+/**
  * WhatsApp chat URL
  */
 export function getWhatsAppUrl(mobile: string, message = ''): string {

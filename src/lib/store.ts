@@ -40,6 +40,9 @@ interface CRMStoreState {
   isHydrated: boolean;
   isSyncing: boolean;
   lastSyncedAt: string | null;
+  googleSheetWebhookUrl: string;
+  setGoogleSheetWebhookUrl: (url: string) => void;
+  syncAllToGoogleSheet: () => Promise<{ success: boolean; message: string; sheetPushed?: boolean }>;
 
   // Authentication & Session
   login: (email: string, password: string) => { success: boolean; error?: string };
@@ -119,6 +122,36 @@ function computeAdvanceStatus(
   return { balancePending: pending, paymentStatus: status };
 }
 
+function syncToServer(payload: { action: string; data: any }) {
+  if (typeof window === 'undefined') return;
+  try {
+    const state = useCRMStore.getState();
+    const webhookUrl = state.googleSheetWebhookUrl;
+
+    fetch('/api/sync-google-sheet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...payload,
+        webhookUrl: webhookUrl || undefined,
+      }),
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json.success) {
+          console.warn('Google Sheet background sync error:', json.error);
+        } else if (json.sheetPushed) {
+          console.log('Successfully pushed to Google Sheet:', json.message);
+        }
+      })
+      .catch((err) => {
+        console.warn('Google Sheet background sync network issue:', err);
+      });
+  } catch (err) {
+    console.warn('Failed to dispatch syncToServer:', err);
+  }
+}
+
 export const useCRMStore = create<CRMStoreState>((set, get) => ({
   clients: initialClients,
   siteContacts: initialSiteContacts,
@@ -132,6 +165,39 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
   isHydrated: false,
   isSyncing: false,
   lastSyncedAt: null,
+  googleSheetWebhookUrl: '',
+
+  setGoogleSheetWebhookUrl: (url: string) => {
+    set({ googleSheetWebhookUrl: url });
+    persistState({ googleSheetWebhookUrl: url });
+  },
+
+  syncAllToGoogleSheet: async () => {
+    set({ isSyncing: true });
+    try {
+      const state = get();
+      const res = await fetch('/api/sync-google-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync_all',
+          data: { clients: state.clients },
+          webhookUrl: state.googleSheetWebhookUrl || undefined,
+        }),
+      });
+      const json = await res.json();
+      set({ isSyncing: false, lastSyncedAt: new Date().toISOString() });
+      if (!json.success) throw new Error(json.error || 'Failed to sync');
+      return {
+        success: true,
+        message: json.message || 'Pushed all records to Google Sheet',
+        sheetPushed: json.sheetPushed,
+      };
+    } catch (err: any) {
+      set({ isSyncing: false });
+      return { success: false, message: err.message || 'Sync failed', sheetPushed: false };
+    }
+  },
 
   init: () => {
     if (typeof window === 'undefined') return;
@@ -167,6 +233,7 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
           users: usersToLoad,
           currentUser: currentUserToLoad,
           lastSyncedAt: parsed.lastSyncedAt || new Date().toISOString(),
+          googleSheetWebhookUrl: parsed.googleSheetWebhookUrl || '',
           isHydrated: true,
         });
         return;
@@ -247,26 +314,34 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
       persistState({ clients: nextClients });
       return { clients: nextClients };
     });
+    syncToServer({ action: 'add_client', data: newClient });
     return newId;
   },
 
   updateClient: (id, updates) => {
+    let updatedClient: Client | undefined;
     set((state) => {
-      const nextClients = state.clients.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              ...updates,
-              updatedAt: new Date().toISOString().split('T')[0],
-            }
-          : c
-      );
+      const nextClients = state.clients.map((c) => {
+        if (c.id === id) {
+          updatedClient = {
+            ...c,
+            ...updates,
+            updatedAt: new Date().toISOString().split('T')[0],
+          };
+          return updatedClient;
+        }
+        return c;
+      });
       persistState({ clients: nextClients });
       return { clients: nextClients };
     });
+    if (updatedClient) {
+      syncToServer({ action: 'update_client', data: updatedClient });
+    }
   },
 
   deleteClient: (id) => {
+    const clientToDelete = get().clients.find((c) => c.id === id);
     set((state) => {
       const nextClients = state.clients.filter((c) => c.id !== id);
       const nextContacts = state.siteContacts.filter((c) => c.clientId !== id);
@@ -290,6 +365,9 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
         clientAdvances: nextAdvances,
       };
     });
+    if (clientToDelete) {
+      syncToServer({ action: 'delete_client', data: clientToDelete });
+    }
   },
 
   updateClientStatus: (id, status) => {
@@ -359,6 +437,10 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
       );
 
       persistState({ quotations: nextQuotes, clients: nextClients });
+      const targetClient = nextClients.find((c) => c.id === quotationData.clientId);
+      if (targetClient) {
+        syncToServer({ action: 'update_client', data: targetClient });
+      }
       return { quotations: nextQuotes, clients: nextClients };
     });
     return newId;
@@ -398,6 +480,11 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
               }
             : c
         );
+
+        const updatedClient = nextClients.find((c) => c.id === target.clientId);
+        if (updatedClient) {
+          syncToServer({ action: 'update_client', data: updatedClient });
+        }
       }
 
       persistState({ quotations: nextQuotes, clients: nextClients });
@@ -426,6 +513,11 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
               }
             : c
         );
+
+        const updatedClient = nextClients.find((c) => c.id === quoteToDelete.clientId);
+        if (updatedClient) {
+          syncToServer({ action: 'update_client', data: updatedClient });
+        }
       }
 
       persistState({ quotations: nextQuotes, clients: nextClients });
@@ -454,6 +546,10 @@ export const useCRMStore = create<CRMStoreState>((set, get) => ({
       );
 
       persistState({ siteVisits: nextVisits, clients: nextClients });
+      const updatedClient = nextClients.find((c) => c.id === visitData.clientId);
+      if (updatedClient) {
+        syncToServer({ action: 'update_client', data: updatedClient });
+      }
       return { siteVisits: nextVisits, clients: nextClients };
     });
     return newId;

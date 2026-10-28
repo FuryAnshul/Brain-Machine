@@ -1,27 +1,45 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useCRMStore } from '@/lib/store';
 import { Modal } from '@/components/shared/Modal';
-import { toISODateString } from '@/lib/formatters';
+import { toISODateString, normalizePhoneNumber } from '@/lib/formatters';
 import { LeadStatus, FollowUpResult } from '@/types';
 
 const clientSchema = z.object({
-  clientName: z.string().min(2, 'Client name must be at least 2 characters'),
-  mobileNo: z.string().regex(/^[0-9]{10}$/, 'Mobile number must be exactly 10 digits'),
-  email: z.string().email('Invalid email address').optional().or(z.literal('')),
-  projectName: z.string().min(2, 'Project / House name is required'),
-  architectBuilder: z.string().optional(),
-  referredBy: z.string().optional(),
-  referrerMobile: z.string().optional(),
-  status: z.string(),
-  assignedTo: z.string(),
-  result: z.string(),
+  clientName: z.string().trim().min(2, 'Client name must be at least 2 characters'),
+  mobileNo: z
+    .string()
+    .trim()
+    .min(1, 'Mobile number is required')
+    .refine(
+      (val) => {
+        const cleaned = normalizePhoneNumber(val);
+        return cleaned.length >= 7 && cleaned.length <= 15;
+      },
+      { message: 'Please enter a valid phone number (at least 7 to 10 digits)' }
+    ),
+  email: z
+    .string()
+    .trim()
+    .optional()
+    .refine((val) => !val || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), {
+      message: 'Invalid email address',
+    }),
+  projectName: z.string().trim().optional(),
+  architectBuilder: z.string().trim().optional(),
+  referredBy: z.string().trim().optional(),
+  referrerMobile: z.string().trim().optional(),
+  status: z.string().default('New'),
+  assignedTo: z.string().default('Ankit Sir'),
+  result: z.string().default('Pending'),
   nextFollowUpDate: z.string().min(1, 'Next follow-up date is required'),
-  remarks: z.string().optional(),
+  remarks: z.string().trim().optional(),
 });
 
 type ClientFormData = z.infer<typeof clientSchema>;
@@ -29,18 +47,25 @@ type ClientFormData = z.infer<typeof clientSchema>;
 interface AddClientModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: (newClientId: string) => void;
 }
 
-export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
+export function AddClientModal({ isOpen, onClose, onSuccess }: AddClientModalProps) {
+  const router = useRouter();
   const { addClient, masterLists } = useCRMStore();
+  const [redirectAfterCreate, setRedirectAfterCreate] = useState(true);
 
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  const getTomorrowDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return toISODateString(tomorrow);
+  };
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<ClientFormData>({
     resolver: zodResolver(clientSchema),
@@ -50,44 +75,78 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
       email: '',
       projectName: '',
       architectBuilder: '',
-      referredBy: masterLists.referralPartners[0] || '',
+      referredBy: (masterLists?.referralPartners && masterLists.referralPartners[0]) || '',
       referrerMobile: '',
       status: 'New',
-      assignedTo: masterLists.teamMembers[0] || 'Ankit Sir',
+      assignedTo: (masterLists?.teamMembers && masterLists.teamMembers[0]) || 'Ankit Sir',
       result: 'Pending',
-      nextFollowUpDate: toISODateString(tomorrow),
+      nextFollowUpDate: getTomorrowDate(),
       remarks: '',
     },
   });
 
+  // Reset form whenever modal opens cleanly
+  useEffect(() => {
+    if (isOpen) {
+      reset({
+        clientName: '',
+        mobileNo: '',
+        email: '',
+        projectName: '',
+        architectBuilder: '',
+        referredBy: (masterLists?.referralPartners && masterLists.referralPartners[0]) || '',
+        referrerMobile: '',
+        status: 'New',
+        assignedTo: (masterLists?.teamMembers && masterLists.teamMembers[0]) || 'Ankit Sir',
+        result: 'Pending',
+        nextFollowUpDate: getTomorrowDate(),
+        remarks: '',
+      });
+    }
+  }, [isOpen, reset, masterLists]);
+
+  const watchedClientName = watch('clientName');
+
   const onSubmit = (data: ClientFormData) => {
-    addClient({
-      clientName: data.clientName,
-      mobileNo: data.mobileNo,
-      email: data.email || undefined,
-      projectName: data.projectName,
-      architectBuilder: data.architectBuilder || '',
-      referredBy: data.referredBy || '',
-      referrerMobile: data.referrerMobile || '',
-      status: data.status as LeadStatus,
-      assignedTo: data.assignedTo,
-      result: data.result as FollowUpResult,
+    const cleanedPhone = normalizePhoneNumber(data.mobileNo) || data.mobileNo.trim();
+    const finalProjectName =
+      data.projectName?.trim() || `${data.clientName.trim()} Residence`;
+
+    const newClientId = addClient({
+      clientName: data.clientName.trim(),
+      mobileNo: cleanedPhone,
+      email: data.email?.trim() || undefined,
+      projectName: finalProjectName,
+      architectBuilder: data.architectBuilder?.trim() || '',
+      referredBy: data.referredBy?.trim() || '',
+      referrerMobile: data.referrerMobile?.trim() || '',
+      status: (data.status as LeadStatus) || 'New',
+      assignedTo: data.assignedTo || 'Ankit Sir',
+      result: (data.result as FollowUpResult) || 'Pending',
       quotationNo: '',
       totalAmount: 0,
       receivedAmount: 0,
       lastFollowUpDate: toISODateString(new Date()),
       nextFollowUpDate: data.nextFollowUpDate,
-      remarks: data.remarks || '',
+      remarks: data.remarks?.trim() || '',
     });
 
     reset();
     onClose();
+
+    if (onSuccess) {
+      onSuccess(newClientId);
+    } else if (redirectAfterCreate) {
+      router.push(`/clients/${newClientId}`);
+    }
   };
 
   const handleClose = () => {
     reset();
     onClose();
   };
+
+  const errorList = Object.values(errors);
 
   return (
     <Modal
@@ -99,6 +158,21 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
       isDirty={isDirty}
     >
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        {/* Error Summary Banner */}
+        {errorList.length > 0 && (
+          <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-start gap-2.5 text-xs text-red-600 dark:text-red-400">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold">Please correct the following fields:</p>
+              <ul className="list-disc list-inside mt-1 space-y-0.5 text-[11px]">
+                {errorList.map((err, idx) => (
+                  <li key={idx}>{err?.message?.toString()}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+
         {/* Row 1: Client Name & Mobile */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -118,17 +192,18 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Mobile No. (10 Digits) <span className="text-red-500">*</span>
+              Mobile No. <span className="text-red-500">*</span>
             </label>
             <input
               {...register('mobileNo')}
               type="tel"
-              maxLength={10}
-              placeholder="98XXXXXXXX"
+              placeholder="e.g. 98XXXXXXXX or +91 98XXXXXXXX"
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            {errors.mobileNo && (
+            {errors.mobileNo ? (
               <p className="text-[11px] text-red-500 mt-1">{errors.mobileNo.message}</p>
+            ) : (
+              <p className="text-[10px] text-slate-400 mt-1">Accepts 10 digits, +91, spaces, or hyphens</p>
             )}
           </div>
         </div>
@@ -137,7 +212,7 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Email Address
+              Email Address <span className="text-slate-400 font-normal">(Optional)</span>
             </label>
             <input
               {...register('email')}
@@ -152,12 +227,21 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Project / House Name <span className="text-red-500">*</span>
+              Project / House Name{' '}
+              <span className="text-slate-400 font-normal">
+                {watchedClientName?.trim()
+                  ? `(Defaults to "${watchedClientName.trim()} Residence")`
+                  : '(Optional)'}
+              </span>
             </label>
             <input
               {...register('projectName')}
               type="text"
-              placeholder="e.g. Bungalow 42, Green Meadows"
+              placeholder={
+                watchedClientName?.trim()
+                  ? `${watchedClientName.trim()} Residence`
+                  : 'e.g. Bungalow 42, Green Meadows'
+              }
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             {errors.projectName && (
@@ -191,7 +275,7 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <datalist id="referral-list">
-              {masterLists.referralPartners.map((p) => (
+              {(masterLists?.referralPartners || []).map((p) => (
                 <option key={p} value={p} />
               ))}
             </datalist>
@@ -208,7 +292,7 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
               {...register('status')}
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {masterLists.statuses.map((s) => (
+              {(masterLists?.statuses || ['New', 'Follow-up', 'Site Visit', 'Quotation']).map((s) => (
                 <option key={s} value={s}>
                   {s}
                 </option>
@@ -224,7 +308,7 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
               {...register('assignedTo')}
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {masterLists.teamMembers.map((m) => (
+              {(masterLists?.teamMembers || ['Ankit Sir', 'Anshul', 'Pushpak']).map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
@@ -240,7 +324,7 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
               {...register('result')}
               className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {masterLists.results.map((r) => (
+              {(masterLists?.results || ['Pending', 'Quotation required', 'Completed']).map((r) => (
                 <option key={r} value={r}>
                   {r}
                 </option>
@@ -278,20 +362,36 @@ export function AddClientModal({ isOpen, onClose }: AddClientModalProps) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={handleClose}
-            className="px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             Cancel
           </button>
           <button
-            type="submit"
+            type="button"
             disabled={isSubmitting}
-            className="px-5 py-2 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 active:scale-95 transition-all"
+            onClick={() => {
+              setRedirectAfterCreate(false);
+              handleSubmit(onSubmit)();
+            }}
+            className="w-full sm:w-auto px-4 py-2 text-xs font-semibold rounded-lg border border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
           >
-            Create Client Record
+            Create Record Only
+          </button>
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={() => {
+              setRedirectAfterCreate(true);
+              handleSubmit(onSubmit)();
+            }}
+            className="w-full sm:w-auto px-5 py-2 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-1.5"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Create & Open Dossier</span>
           </button>
         </div>
       </form>
