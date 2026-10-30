@@ -1,8 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Home,
   Lock,
@@ -13,25 +12,50 @@ import {
   ArrowRight,
   Sun,
   Moon,
+  Loader2,
+  CheckCircle2,
+  Info,
 } from 'lucide-react';
 import { useCRMStore } from '@/lib/store';
+import { AdminForgotPasswordModal } from '@/components/auth/AdminForgotPasswordModal';
+import { sanitizeRedirectUrl } from '@/lib/security';
+import { validateAllowedEmail } from '@/lib/validation';
 
-export default function LoginPage() {
+function LoginFormContent() {
   const router = useRouter();
-  const { init, login, currentUser, logout, isHydrated } = useCRMStore();
+  const searchParams = useSearchParams();
+  const { init, login, currentUser, isHydrated } = useCRMStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     init();
     const isDark = document.documentElement.classList.contains('dark');
     setIsDarkMode(isDark);
-  }, [init]);
+
+    const reason = searchParams.get('reason');
+    if (reason === 'expired') {
+      setError('Your session has expired. Please sign in again to continue.');
+    } else if (reason === 'revoked') {
+      setError('Access Revoked. Your login profile has been deactivated by an administrator.');
+    }
+  }, [init, searchParams]);
+
+  // If already authenticated, redirect to destination or dashboard
+  useEffect(() => {
+    if (isHydrated && currentUser) {
+      const rawReturnUrl = searchParams.get('returnUrl');
+      const target = sanitizeRedirectUrl(rawReturnUrl, '/clients');
+      router.replace(target);
+    }
+  }, [isHydrated, currentUser, router, searchParams]);
 
   const toggleTheme = () => {
     if (isDarkMode) {
@@ -45,17 +69,47 @@ export default function LoginPage() {
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isLoading) return;
+
     setError(null);
+    setSuccessMessage(null);
+
+    // Validate email & allowed domain
+    const emailValidation = validateAllowedEmail(email);
+    if (!emailValidation.valid) {
+      setError(emailValidation.error || 'Please use your @brainmachine.com email address.');
+      return;
+    }
+    const trimmedEmail = emailValidation.normalized;
+
+    // Validate password
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+
     setIsLoading(true);
 
-    const res = login(email, password);
-    if (!res.success) {
+    try {
+      const res = await login(trimmedEmail, password);
+      if (!res.success) {
+        setIsLoading(false);
+        setError(res.error || 'Invalid email address or password. Please verify your credentials.');
+        return;
+      }
+
+      setSuccessMessage('Authentication successful. Redirecting to workspace...');
+      const rawReturnUrl = searchParams.get('returnUrl');
+      const target = sanitizeRedirectUrl(rawReturnUrl, '/clients');
+
+      setTimeout(() => {
+        router.replace(target);
+      }, 350);
+    } catch {
       setIsLoading(false);
-      setError(res.error || 'Authentication failed. Please verify your credentials.');
-    } else {
-      window.location.href = '/clients';
+      setError('An unexpected error occurred during authentication. Please try again.');
     }
   };
 
@@ -69,6 +123,7 @@ export default function LoginPage() {
       <div className="absolute top-6 right-6 z-20">
         <button
           onClick={toggleTheme}
+          type="button"
           className="p-2.5 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 backdrop-blur shadow-sm hover:scale-105 transition-all text-slate-600 dark:text-slate-300"
           title="Toggle Theme"
         >
@@ -89,44 +144,14 @@ export default function LoginPage() {
             <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
               v5.4
             </span>
+            <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+              Demo Prototype
+            </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
             Luxury Automation & Operations Management Suite
           </p>
         </div>
-
-        {/* Existing Active Session Banner */}
-        {isHydrated && currentUser && (
-          <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200 dark:border-blue-800/80 shadow-sm flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center shrink-0">
-                {currentUser.name.charAt(0)}
-              </div>
-              <div>
-                <p className="font-semibold text-slate-900 dark:text-white">
-                  {currentUser.name}
-                </p>
-                <p className="text-[11px] text-blue-600 dark:text-blue-400 capitalize">
-                  {currentUser.role} Session Active
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link
-                href="/clients"
-                className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] transition-colors"
-              >
-                Go to App
-              </Link>
-              <button
-                onClick={() => logout()}
-                className="px-2.5 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium text-[11px] transition-colors"
-              >
-                Sign Out
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Main Login Card */}
         <div className="p-6 sm:p-8 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200/80 dark:border-slate-800 backdrop-blur-xl shadow-xl shadow-slate-200/50 dark:shadow-none space-y-5">
@@ -139,6 +164,14 @@ export default function LoginPage() {
             </p>
           </div>
 
+          {/* Prototype Architecture Disclosure */}
+          <div className="p-3 rounded-xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/60 text-[11px] text-amber-900 dark:text-amber-300 flex items-start gap-2.5">
+            <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+            <div className="leading-relaxed">
+              <strong className="font-semibold">Evaluation Environment:</strong> Running in client-side prototype mode without an external backend. Connect an enterprise authentication service before deploying to production.
+            </div>
+          </div>
+
           {error && (
             <div className="p-3.5 rounded-xl bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-900 text-xs text-red-700 dark:text-red-300 flex items-start gap-2.5 animate-shake">
               <ShieldAlert className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
@@ -146,44 +179,78 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-4">
+          {successMessage && (
+            <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-900 text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <div className="leading-relaxed font-medium">{successMessage}</div>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4" noValidate>
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              <label
+                htmlFor="login-email"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+              >
                 Email Address
               </label>
               <div className="relative">
                 <Mail className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input
+                  id="login-email"
                   type="email"
+                  autoComplete="email"
                   required
+                  disabled={isLoading}
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@homeautomation.com"
-                  className="w-full pl-9 pr-3 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  placeholder="name@brainmachine.com"
+                  className="w-full pl-9 pr-3 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
 
             <div>
-              <div className="mb-1.5">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+              <div className="flex items-center justify-between mb-1.5">
+                <label
+                  htmlFor="login-password"
+                  className="text-xs font-semibold text-slate-700 dark:text-slate-300"
+                >
                   Password
                 </label>
+                <button
+                  type="button"
+                  onClick={() => setIsForgotModalOpen(true)}
+                  className="text-[11px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                >
+                  Forgot password?
+                </button>
               </div>
               <div className="relative">
                 <Lock className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                 <input
+                  id="login-password"
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   required
+                  disabled={isLoading}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="•••••••• (admin123)"
-                  className="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(null);
+                  }}
+                  placeholder="••••••••"
+                  className="w-full pl-9 pr-10 py-2.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-950/50 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-slate-900 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 />
                 <button
                   type="button"
+                  tabIndex={-1}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                  title={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -192,33 +259,44 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-lg shadow-blue-500/25 active:scale-[0.98] disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+              disabled={isLoading || !email || !password}
+              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs shadow-lg shadow-blue-500/25 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
             >
-              <span>{isLoading ? 'Verifying...' : 'Sign In to Workspace'}</span>
-              <ArrowRight className="w-4 h-4" />
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Verifying credentials...</span>
+                </>
+              ) : (
+                <>
+                  <span>Sign In to Workspace</span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
-
-            <div className="pt-2 text-center border-t border-slate-100 dark:border-slate-800/80">
-              <span className="text-[11px] text-slate-400 dark:text-slate-500">
-                Default credentials: <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">admin@homeautomation.com</span> / <span className="font-mono font-semibold text-slate-700 dark:text-slate-300">admin123</span>
-              </span>
-            </div>
           </form>
         </div>
-
-        {/* Back Link */}
-        {isHydrated && currentUser && (
-          <div className="text-center">
-            <Link
-              href="/clients"
-              className="text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-            >
-              ← Return to Client Overview
-            </Link>
-          </div>
-        )}
       </div>
+
+      {/* Admin Password Recovery Modal */}
+      <AdminForgotPasswordModal
+        isOpen={isForgotModalOpen}
+        onClose={() => setIsForgotModalOpen(false)}
+      />
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <LoginFormContent />
+    </Suspense>
   );
 }

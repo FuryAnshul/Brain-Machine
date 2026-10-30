@@ -1,4 +1,5 @@
 import { FollowUpDueStatus, LeadStatus } from '@/types';
+import { sanitizeCsvCell } from './security';
 
 /**
  * Format a number into Indian Rupee notation (Lakhs & Crores)
@@ -144,21 +145,13 @@ export function exportToCSV(
   const headerLabels = headersMap ? Object.values(headersMap) : keys;
 
   const csvRows: string[] = [];
-  csvRows.push(headerLabels.map((h) => `"${h.replace(/"/g, '""')}"`).join(','));
+  csvRows.push(headerLabels.map((h) => sanitizeCsvCell(h)).join(','));
 
   for (const row of data) {
     const values = keys.map((key) => {
-      let val = row[key];
-      if (val === undefined || val === null) {
-        val = '';
-      } else if (typeof val === 'number') {
-        val = String(val);
-      } else if (typeof val === 'object') {
-        val = JSON.stringify(val);
-      } else {
-        val = String(val);
-      }
-      return `"${val.replace(/"/g, '""')}"`;
+      const val = row[key];
+      // Secure cell against CSV Formula Injection (CWE-1236)
+      return sanitizeCsvCell(val);
     });
     csvRows.push(values.join(','));
   }

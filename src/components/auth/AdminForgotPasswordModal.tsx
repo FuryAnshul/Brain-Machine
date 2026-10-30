@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { KeyRound, ShieldAlert, CheckCircle2, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 import { Modal } from '@/components/shared/Modal';
 import { useCRMStore } from '@/lib/store';
+import { validateAllowedEmail } from '@/lib/validation';
 
 interface AdminForgotPasswordModalProps {
   isOpen: boolean;
@@ -19,13 +20,15 @@ export function AdminForgotPasswordModal({ isOpen, onClose }: AdminForgotPasswor
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!email.trim()) {
-      setError('Please enter the admin email address.');
+    const emailVal = validateAllowedEmail(email);
+    if (!emailVal.valid) {
+      setError(emailVal.error || 'Please use your @brainmachine.com email address.');
       return;
     }
     if (!recoveryKey.trim()) {
@@ -41,11 +44,16 @@ export function AdminForgotPasswordModal({ isOpen, onClose }: AdminForgotPasswor
       return;
     }
 
-    const res = adminResetPassword(email, recoveryKey, newPassword);
-    if (!res.success) {
-      setError(res.error || 'Failed to reset admin password.');
-    } else {
-      setSuccess(true);
+    setIsSubmitting(true);
+    try {
+      const res = await adminResetPassword(emailVal.normalized, recoveryKey, newPassword);
+      if (!res.success) {
+        setError(res.error || 'Failed to reset admin password.');
+      } else {
+        setSuccess(true);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -102,10 +110,7 @@ export function AdminForgotPasswordModal({ isOpen, onClose }: AdminForgotPasswor
               Administrator Verification Protocol
             </p>
             <p className="text-slate-600 dark:text-slate-400">
-              Default system master recovery key is{' '}
-              <code className="font-mono font-bold text-amber-900 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/60 px-1 py-0.5 rounded">
-                HA-ADMIN-2026-SECURE
-              </code>
+              Please enter your registered administrator email address and your Master Security Recovery Key to reset your password.
             </p>
           </div>
 
@@ -120,7 +125,7 @@ export function AdminForgotPasswordModal({ isOpen, onClose }: AdminForgotPasswor
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@homeautomation.com"
+                placeholder="admin@brainmachine.com"
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
@@ -137,7 +142,7 @@ export function AdminForgotPasswordModal({ isOpen, onClose }: AdminForgotPasswor
                 required
                 value={recoveryKey}
                 onChange={(e) => setRecoveryKey(e.target.value)}
-                placeholder="e.g. HA-ADMIN-2026-SECURE"
+                placeholder="Enter Administrator Security Recovery Key"
                 className="w-full pl-9 pr-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>

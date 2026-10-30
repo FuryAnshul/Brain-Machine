@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import * as xlsx from 'xlsx';
 import defaultSheetData from '@/lib/googleSheetData.json';
+import { sanitizeUserFacingError } from '@/lib/security';
 
 const GOOGLE_SHEET_EXPORT_URL =
   'https://docs.google.com/spreadsheets/d/1rGdluueqeQgSswQIsJKcuJtN0_FS8JKs/export?format=xlsx';
@@ -207,10 +208,9 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { action, data, webhookUrl: clientWebhookUrl } = body;
 
-    const webhookUrl =
-      clientWebhookUrl ||
-      process.env.GOOGLE_SHEET_WEBHOOK_URL ||
-      process.env.NEXT_PUBLIC_GOOGLE_SHEET_WEBHOOK_URL;
+    // Server reads server-only environment variable.
+    // Notice: Never expose secrets through NEXT_PUBLIC_ variables.
+    const webhookUrl = clientWebhookUrl || process.env.GOOGLE_SHEET_WEBHOOK_URL;
 
     // 1. Update the local Excel workbook file (downloaded_sheet.xlsx)
     const xlsxPath = path.join(process.cwd(), 'downloaded_sheet.xlsx');
@@ -354,8 +354,12 @@ export async function POST(req: Request) {
     });
   } catch (error: any) {
     console.error('Error handling sync-google-sheet POST:', error);
+    const safeError = sanitizeUserFacingError(
+      error,
+      'An unexpected error occurred during Google Sheet synchronization.'
+    );
     return NextResponse.json(
-      { success: false, error: error.message || 'Internal error' },
+      { success: false, error: safeError },
       { status: 500 }
     );
   }

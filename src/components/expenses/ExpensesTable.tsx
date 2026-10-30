@@ -363,8 +363,28 @@ export function ExpensesTable() {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredExpenses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-xs text-slate-400">
-                    No expense records found matching filters.
+                  <td colSpan={9} className="py-14 text-center">
+                    <div className="max-w-xs mx-auto text-center space-y-2">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center mx-auto">
+                        <Receipt className="w-5 h-5" />
+                      </div>
+                      <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                        No expense records found matching filters
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Try clearing search terms or selecting different categories.
+                      </p>
+                      <div className="flex items-center justify-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsAddOpen(true)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Record New Expense</span>
+                        </button>
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ) : (

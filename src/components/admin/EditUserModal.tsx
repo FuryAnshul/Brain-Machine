@@ -5,6 +5,7 @@ import { UserCog, Mail, Lock, User, Phone, ShieldCheck, KeyRound, Trash2 } from 
 import { Modal } from '@/components/shared/Modal';
 import { useCRMStore } from '@/lib/store';
 import { UserProfile, UserRole, UserStatus } from '@/types';
+import { validateAllowedEmail } from '@/lib/validation';
 
 interface EditUserModalProps {
   user: UserProfile | null;
@@ -28,11 +29,11 @@ export function EditUserModal({ user, isOpen, onClose }: EditUserModalProps) {
     if (user) {
       setName(user.name);
       setEmail(user.email);
-      setPassword(user.password);
+      setPassword(user.password || '');
       setRole(user.role);
       setStatus(user.status);
       setMobileNo(user.mobileNo || '');
-      setRecoveryKey(user.recoveryKey || 'HA-ADMIN-2026-SECURE');
+      setRecoveryKey(user.recoveryKey || '');
       setError(null);
     }
   }, [user]);
@@ -43,24 +44,28 @@ export function EditUserModal({ user, isOpen, onClose }: EditUserModalProps) {
     e.preventDefault();
     setError(null);
 
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      setError('Name, email, and password cannot be empty.');
+    if (!name.trim()) {
+      setError('Name cannot be empty.');
       return;
     }
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+    const emailVal = validateAllowedEmail(email);
+    if (!emailVal.valid) {
+      setError(emailVal.error || 'Please use your @brainmachine.com email address.');
+      return;
+    }
+
+    if (password && password.length < 6) {
+      setError('New password must be at least 6 characters.');
       return;
     }
 
     updateUserProfile(user.id, {
       name: name.trim(),
-      email: email.trim().toLowerCase(),
-      password,
+      email: emailVal.normalized,
       role,
       status,
       mobileNo: mobileNo.trim() || undefined,
-      recoveryKey: role === 'admin' ? recoveryKey.trim() || 'HA-ADMIN-2026-SECURE' : undefined,
     });
 
     onClose();
@@ -118,15 +123,15 @@ export function EditUserModal({ user, isOpen, onClose }: EditUserModalProps) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Password
+              Reset Password (Optional)
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
-                type="text"
-                required
+                type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="Leave blank to keep current"
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>

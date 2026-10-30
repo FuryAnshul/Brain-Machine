@@ -185,6 +185,7 @@ export function ClientOverviewTable() {
     { id: 'overdue', label: 'Overdue', count: kpis.overdueCount },
     { id: 'today', label: "Today's Follow-ups", count: kpis.todayCount },
     { id: 'quotations', label: 'Quotation Pending', count: kpis.quotePendingCount },
+    { id: 'final', label: 'Final Stage', count: kpis.finalCount },
     { id: 'orders', label: 'Active Orders', count: kpis.orderCount },
     { id: 'completed', label: 'Completed', count: kpis.completedCount },
   ];
@@ -193,6 +194,7 @@ export function ClientOverviewTable() {
   const activePresetTab = useMemo(() => {
     if (dueFilter === 'Overdue') return 'overdue';
     if (dueFilter === 'Today') return 'today';
+    if (statusFilter.includes('Final')) return 'final';
     if (statusFilter.includes('Order')) return 'orders';
     if (statusFilter.includes('Completed')) return 'completed';
     if (statusFilter.includes('Quotation') || resultFilter.includes('Quotation required')) return 'quotations';
@@ -211,6 +213,8 @@ export function ClientOverviewTable() {
       params.set('due', 'Today');
     } else if (tabId === 'quotations') {
       params.set('status', 'Quotation');
+    } else if (tabId === 'final') {
+      params.set('status', 'Final');
     } else if (tabId === 'orders') {
       params.set('status', 'Order');
     } else if (tabId === 'completed') {
@@ -436,11 +440,7 @@ export function ClientOverviewTable() {
 
         {/* Final Clients */}
         <div
-          onClick={() => {
-            const params = new URLSearchParams();
-            params.set('status', 'Final');
-            router.push(`/clients?${params.toString()}`);
-          }}
+          onClick={() => handlePresetTabChange('final')}
           className="cursor-pointer bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3.5 shadow-sm hover:border-cyan-400 transition-all group"
         >
           <div className="flex items-center justify-between">

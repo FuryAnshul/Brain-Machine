@@ -150,14 +150,17 @@ export interface UserProfile {
   id: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
   role: UserRole;
   status: UserStatus;
   mobileNo?: string;
   recoveryKey?: string;
   createdAt: string;
   lastLoginAt?: string;
+  sessionExpiry?: number;
 }
+
+export type SafeUserProfile = Omit<UserProfile, 'password'>;
 
 export interface AuthSession {
   currentUser: UserProfile | null;

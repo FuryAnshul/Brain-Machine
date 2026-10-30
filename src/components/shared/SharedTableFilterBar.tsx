@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Search,
@@ -77,6 +77,20 @@ export function SharedTableFilterBar({
   const [openFacetKey, setOpenFacetKey] = useState<string | null>(null);
   const [openColumnsMenu, setOpenColumnsMenu] = useState(false);
   const [openDateMenu, setOpenDateMenu] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpenFacetKey(null);
+        setOpenColumnsMenu(false);
+        setOpenDateMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Sync state when URL changes externally
   useEffect(() => {
@@ -160,7 +174,7 @@ export function SharedTableFilterBar({
   const activeDatePreset = searchParams.get('dateRange') || 'all';
 
   return (
-    <div className="space-y-3 mb-4">
+    <div ref={containerRef} className="space-y-3 mb-4">
       {/* Top Bar: Preset Tabs + Quick Action */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         {/* Preset Tabs */}

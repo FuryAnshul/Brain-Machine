@@ -19,12 +19,14 @@ import {
   LogOut,
   ChevronDown,
   UserCheck,
+  Database,
 } from 'lucide-react';
 import { useCRMStore } from '@/lib/store';
 import { computeFollowUpDueStatus } from '@/lib/formatters';
 import { cn } from '@/lib/utils';
 import { AddClientModal } from '../clients/AddClientModal';
 import { GoogleSheetSyncModal } from '../shared/GoogleSheetSyncModal';
+import { DataPersistenceModal } from '../shared/DataPersistenceModal';
 
 export function Navbar() {
   const pathname = usePathname();
@@ -34,6 +36,7 @@ export function Navbar() {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
+  const [isPersistenceModalOpen, setIsPersistenceModalOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const menuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -50,13 +53,6 @@ export function Navbar() {
       document.documentElement.classList.remove('dark');
     }
   }, [init]);
-
-  // Automatically navigate to login page when logged out
-  useEffect(() => {
-    if (isHydrated && !currentUser && pathname !== '/login') {
-      window.location.href = '/login';
-    }
-  }, [isHydrated, currentUser, pathname]);
 
   // Click outside to close profile dropdown
   useEffect(() => {
@@ -84,10 +80,11 @@ export function Navbar() {
     }, 300);
   };
 
+  // Logout handler
   const handleLogout = () => {
     logout();
     setIsUserMenuOpen(false);
-    window.location.href = '/login';
+    router.replace('/login');
   };
 
   const toggleTheme = () => {
@@ -196,13 +193,17 @@ export function Navbar() {
               {/* Demo Reset Button */}
               <button
                 onClick={() => {
-                  if (confirm('Reset CRM to factory demo data from Home_Automation_CRM_v5_4.xlsx?')) {
+                  if (
+                    confirm(
+                      'Reset CRM business records to factory Excel demo dataset?\n\n' +
+                        'NOTE: Your active user account, session, theme, and webhook configuration will be safely preserved.'
+                    )
+                  ) {
                     resetToFactoryDemo();
-                    window.location.reload();
                   }
                 }}
                 className="p-2 rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                title="Reset to Excel Demo Data"
+                title="Reset to Excel Demo Data (Preserves User Settings & Session)"
               >
                 <RotateCcw className="w-4 h-4" />
               </button>
@@ -285,6 +286,9 @@ export function Navbar() {
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             Active Session
                           </span>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400 border border-amber-200 dark:border-amber-900 font-medium">
+                            Prototype Mode
+                          </span>
                         </div>
                       </div>
 
@@ -352,14 +356,28 @@ export function Navbar() {
 
                       {/* General Profile Options */}
                       <div className="py-1 px-1 space-y-0.5">
-                        <Link
-                          href="/login"
-                          onClick={() => setIsUserMenuOpen(false)}
-                          className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                        <button
+                          onClick={() => {
+                            setIsUserMenuOpen(false);
+                            setIsPersistenceModalOpen(true);
+                          }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
+                        >
+                          <Database className="w-3.5 h-3.5 text-blue-500" />
+                          <span>Data Storage & Integrity</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            logout();
+                            setIsUserMenuOpen(false);
+                            router.replace('/login');
+                          }}
+                          className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors text-left"
                         >
                           <UserCheck className="w-3.5 h-3.5 text-slate-400" />
                           <span>Switch Profile / Login</span>
-                        </Link>
+                        </button>
 
                         <button
                           onClick={handleLogout}
@@ -418,6 +436,12 @@ export function Navbar() {
 
       {/* Google Sheet Live Storage & Sync Modal */}
       <GoogleSheetSyncModal isOpen={isSyncModalOpen} onClose={() => setIsSyncModalOpen(false)} />
+
+      {/* Data Integrity & Persistence Architecture Modal */}
+      <DataPersistenceModal
+        isOpen={isPersistenceModalOpen}
+        onClose={() => setIsPersistenceModalOpen(false)}
+      />
     </>
   );
 }

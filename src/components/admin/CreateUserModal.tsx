@@ -5,6 +5,7 @@ import { UserPlus, Mail, Lock, User, Phone, ShieldCheck, KeyRound } from 'lucide
 import { Modal } from '@/components/shared/Modal';
 import { useCRMStore } from '@/lib/store';
 import { UserRole } from '@/types';
+import { validateAllowedEmail } from '@/lib/validation';
 
 interface CreateUserModalProps {
   isOpen: boolean;
@@ -19,15 +20,16 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>('staff');
   const [mobileNo, setMobileNo] = useState('');
-  const [recoveryKey, setRecoveryKey] = useState('HA-ADMIN-2026-SECURE');
+  const [recoveryKey, setRecoveryKey] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    if (!name.trim() || !email.trim() || !password.trim()) {
-      setError('Please fill in all mandatory fields.');
+    const emailVal = validateAllowedEmail(email);
+    if (!emailVal.valid) {
+      setError(emailVal.error || 'Please use your @brainmachine.com email address.');
       return;
     }
 
@@ -38,12 +40,12 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
 
     const res = createUserProfile({
       name: name.trim(),
-      email: email.trim().toLowerCase(),
+      email: emailVal.normalized,
       password,
       role,
       status: 'active',
       mobileNo: mobileNo.trim() || undefined,
-      recoveryKey: role === 'admin' ? recoveryKey.trim() || 'HA-ADMIN-2026-SECURE' : undefined,
+      recoveryKey: role === 'admin' ? recoveryKey.trim() || undefined : undefined,
     });
 
     if (!res.success) {
@@ -57,7 +59,7 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
     setPassword('');
     setRole('staff');
     setMobileNo('');
-    setRecoveryKey('HA-ADMIN-2026-SECURE');
+    setRecoveryKey('');
     setError(null);
     onClose();
   };
@@ -106,7 +108,7 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="ramesh@homeautomation.com"
+                placeholder="ramesh@brainmachine.com"
                 className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
@@ -177,7 +179,7 @@ export function CreateUserModal({ isOpen, onClose }: CreateUserModalProps) {
                 type="text"
                 value={recoveryKey}
                 onChange={(e) => setRecoveryKey(e.target.value)}
-                placeholder="e.g. HA-ADMIN-2026-SECURE"
+                placeholder="Enter unique administrator recovery key"
                 className="w-full pl-9 pr-3 py-2 text-xs font-mono rounded-lg border border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none"
               />
             </div>
